@@ -28,18 +28,12 @@ import org.lwjgl.opengl.GL40;
 import org.lwjgl.opengl.GL43;
 import org.lwjgl.opengl.GLCapabilities;
 
-import com.modularmods.mcgltf.iris.RenderedGltfModelGL30Iris;
-import com.modularmods.mcgltf.iris.RenderedGltfModelGL33Iris;
-import com.modularmods.mcgltf.iris.RenderedGltfModelGL40Iris;
-import com.modularmods.mcgltf.iris.RenderedGltfModelIris;
-
 import de.javagl.jgltf.model.GltfModel;
 import de.javagl.jgltf.model.io.Buffers;
 import de.javagl.jgltf.model.io.GltfModelReader;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
 import net.fabricmc.fabric.api.resource.SimpleSynchronousResourceReloadListener;
-import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.resources.ResourceLocation;
@@ -79,67 +73,34 @@ public class MCglTF implements ModInitializer {
 	@Override
 	public void onInitialize() {
 		Consumer<Map<ResourceLocation, MutablePair<GltfModel, List<IGltfModelReceiver>>>> processRenderedGltfModelSelector;
-		if(FabricLoader.getInstance().isModLoaded("iris")) {
-			shaderModActive = net.irisshaders.iris.api.v0.IrisApi.getInstance()::isShaderPackInUse;
-			
-			processRenderedGltfModelSelector = (lookup) -> {
-				switch(renderedModelGLProfile) {
-				case GL43:
-					processRenderedGltfModelsGL43Iris(lookup);
-					break;
-				case GL40:
-					processRenderedGltfModelsGL40Iris(lookup);
-					break;
-				case GL33:
-					processRenderedGltfModelsGL33Iris(lookup);
-					break;
-				case GL30:
-					processRenderedGltfModelsGL30Iris(lookup);
-					break;
-				default:
-					GLCapabilities glCapabilities = GL.getCapabilities();
-					if(glCapabilities.glTexBufferRange != 0) processRenderedGltfModelsGL43Iris(lookup);
-					else if(glCapabilities.glGenTransformFeedbacks != 0) processRenderedGltfModelsGL40Iris(lookup);
-					else processRenderedGltfModelsGL33Iris(lookup);
-					break;
-				}
-			};
-		}
-		else {
-			if(FabricLoader.getInstance().isModLoaded("optifabric")) {
-				shaderModActive = () -> net.optifine.shaders.Shaders.isShaderPackInitialized && !net.optifine.shaders.Shaders.currentShaderName.equals(net.optifine.shaders.Shaders.SHADER_PACK_NAME_DEFAULT);
+		shaderModActive = () -> false;
+
+		processRenderedGltfModelSelector = (lookup) -> {
+			switch(renderedModelGLProfile) {
+			case GL43:
+				processRenderedGltfModelsGL43(lookup);
+				break;
+			case GL40:
+				processRenderedGltfModelsGL40(lookup);
+				break;
+			case GL33:
+				processRenderedGltfModelsGL33(lookup);
+				break;
+			case GL30:
+				processRenderedGltfModelsGL30(lookup);
+				break;
+			default:
+				GLCapabilities glCapabilities = GL.getCapabilities();
+				if(glCapabilities.glTexBufferRange != 0) processRenderedGltfModelsGL43(lookup);
+				else if(glCapabilities.glGenTransformFeedbacks != 0) processRenderedGltfModelsGL40(lookup);
+				else processRenderedGltfModelsGL33(lookup);
+				break;
 			}
-			else {
-				shaderModActive = () -> false;
-			}
-			
-			processRenderedGltfModelSelector = (lookup) -> {
-				switch(renderedModelGLProfile) {
-				case GL43:
-					processRenderedGltfModelsGL43(lookup);
-					break;
-				case GL40:
-					processRenderedGltfModelsGL40(lookup);
-					break;
-				case GL33:
-					processRenderedGltfModelsGL33(lookup);
-					break;
-				case GL30:
-					processRenderedGltfModelsGL30(lookup);
-					break;
-				default:
-					GLCapabilities glCapabilities = GL.getCapabilities();
-					if(glCapabilities.glTexBufferRange != 0) processRenderedGltfModelsGL43(lookup);
-					else if(glCapabilities.glGenTransformFeedbacks != 0) processRenderedGltfModelsGL40(lookup);
-					else processRenderedGltfModelsGL33(lookup);
-					break;
-				}
-			};
-		}
-		
+		};
+
 		Minecraft.getInstance().execute(() -> {
 			lightTexture = Minecraft.getInstance().getTextureManager().getTexture(new ResourceLocation("dynamic/light_map_1"));
-			
+
 			switch(renderedModelGLProfile) {
 			case GL43:
 				createSkinningProgramGL43();
@@ -156,26 +117,26 @@ public class MCglTF implements ModInitializer {
 				else createSkinningProgramGL33();
 				break;
 			}
-			
+
 			GL11.glPixelStorei(GL11.GL_UNPACK_ROW_LENGTH, 0);
 			GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_ROWS, 0);
 			GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_PIXELS, 0);
 			GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 4);
-			
+
 			int currentTexture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
-			
+
 			defaultColorMap = GL11.glGenTextures();
 			GL11.glBindTexture(GL11.GL_TEXTURE_2D, defaultColorMap);
 			GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, 2, 2, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, Buffers.create(new byte[]{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1}));
 			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_BASE_LEVEL, 0);
 			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL, 0);
-			
+
 			defaultNormalMap = GL11.glGenTextures();
 			GL11.glBindTexture(GL11.GL_TEXTURE_2D, defaultNormalMap);
 			GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA, 2, 2, 0, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, Buffers.create(new byte[]{-128, -128, -1, -1, -128, -128, -1, -1, -128, -128, -1, -1, -128, -128, -1, -1}));
 			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_BASE_LEVEL, 0);
 			GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL12.GL_TEXTURE_MAX_LEVEL, 0);
-			
+
 			GL11.glBindTexture(GL11.GL_TEXTURE_2D, currentTexture);
 		});
 		
@@ -190,14 +151,14 @@ public class MCglTF implements ModInitializer {
 			public void onResourceManagerReload(ResourceManager resourceManager) {
 				gltfRenderData.forEach(Runnable::run);
 				gltfRenderData.clear();
-				
+
 				GL11.glPixelStorei(GL11.GL_UNPACK_ROW_LENGTH, 0);
 				GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_ROWS, 0);
 				GL11.glPixelStorei(GL11.GL_UNPACK_SKIP_PIXELS, 0);
 				GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, 4);
-				
+
 				int currentTexture = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
-				
+
 				Map<ResourceLocation, MutablePair<GltfModel, List<IGltfModelReceiver>>> lookup = new HashMap<ResourceLocation, MutablePair<GltfModel, List<IGltfModelReceiver>>>();
 				gltfModelReceivers.forEach((receiver) -> {
 					ResourceLocation modelLocation = receiver.getModelLocation();
@@ -219,13 +180,13 @@ public class MCglTF implements ModInitializer {
 				GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, 0);
 				GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, 0);
 				GL30.glBindVertexArray(0);
-				
+
 				GL11.glBindTexture(GL11.GL_TEXTURE_2D, currentTexture);
-				
+
 				loadedBufferResources.clear();
 				loadedImageResources.clear();
 			}
-			
+
 		});
 	}
 
@@ -436,40 +397,12 @@ public class MCglTF implements ModInitializer {
 		processRenderedGltfModels(lookup, RenderedGltfModelGL30::new);
 	}
 	
-	private void processRenderedGltfModelsGL43Iris(Map<ResourceLocation, MutablePair<GltfModel, List<IGltfModelReceiver>>> lookup) {
-		processRenderedGltfModels(lookup, RenderedGltfModelIris::new);
-		GL15.glBindBuffer(GL30.GL_TRANSFORM_FEEDBACK_BUFFER, 0);
-		GL15.glBindBuffer(GL43.GL_SHADER_STORAGE_BUFFER, 0);
-		GL40.glBindTransformFeedback(GL40.GL_TRANSFORM_FEEDBACK, 0);
-	}
-	
-	private void processRenderedGltfModelsGL40Iris(Map<ResourceLocation, MutablePair<GltfModel, List<IGltfModelReceiver>>> lookup) {
-		processRenderedGltfModels(lookup, RenderedGltfModelGL40Iris::new);
-		GL15.glBindBuffer(GL30.GL_TRANSFORM_FEEDBACK_BUFFER, 0);
-		GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
-		GL40.glBindTransformFeedback(GL40.GL_TRANSFORM_FEEDBACK, 0);
-	}
-	
-	private void processRenderedGltfModelsGL33Iris(Map<ResourceLocation, MutablePair<GltfModel, List<IGltfModelReceiver>>> lookup) {
-		processRenderedGltfModels(lookup, RenderedGltfModelGL33Iris::new);
-		GL15.glBindBuffer(GL30.GL_TRANSFORM_FEEDBACK_BUFFER, 0);
-		GL15.glBindBuffer(GL31.GL_TEXTURE_BUFFER, 0);
-	}
-	
-	private void processRenderedGltfModelsGL30Iris(Map<ResourceLocation, MutablePair<GltfModel, List<IGltfModelReceiver>>> lookup) {
-		processRenderedGltfModels(lookup, RenderedGltfModelGL30Iris::new);
-	}
-	
 	public enum EnumRenderedModelGLProfile {
 		AUTO,
 		GL43,
 		GL40,
 		GL33,
 		GL30
-	}
-	
-	public EnumRenderedModelGLProfile getRenderedModelGLProfile() {
-		return renderedModelGLProfile;
 	}
 	
 	private String provider(String filename) {
